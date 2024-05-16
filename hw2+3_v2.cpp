@@ -769,21 +769,20 @@ map<unsigned int,node*> node::id_node_table;
 
 class IoT_device: public node {
         // map<unsigned int,bool> one_hop_neighbors; // you can use this variable to record the node's 1-hop neighbors 
-        
-        bool hi; // this is used for example; you can remove it when doing hw2
         //Linyexion coding------------
+        unsigned int IoT_device_counter_recorder;
         unsigned int parent;
         vector<unsigned int> children;
         //----------------------------
     protected:
         IoT_device() {} // it should not be used
         IoT_device(IoT_device&) {} // it should not be used
-        IoT_device(unsigned int _id): node(_id), hi(false) {} // this constructor cannot be directly called by users
+        IoT_device(unsigned int _id): node(_id), IoT_device_counter_recorder(UINT_MAX), parent(UINT_MAX){} // this constructor cannot be directly called by users
     
     public:
         ~IoT_device(){}
         string type() { return "IoT_device"; }
-        
+        // get parent
         // please define recv_handler function to deal with the incoming packet
         virtual void recv_handler (packet *p);
         
@@ -1923,28 +1922,30 @@ void IoT_device::recv_handler (packet *p){
     // you can remove the variable hi and create your own routing table in class IoT_device
     if (p == nullptr) return ;
     
-    if (p->type() == "IoT_ctrl_packet" && !hi ) { // the device receives a packet from the sink
+    if (p->type() == "IoT_ctrl_packet") { // the device receives a packet from the sink
         //packet content
         IoT_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<IoT_ctrl_packet*> (p);
-        IoT_ctrl_payload *l3 = nullptr;//Linyexion:store the message
+        IoT_ctrl_payload *l3 = nullptr;
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());
-        //Linyexion conding--------------------
-        parent = p3->getHeader()->getPreID();
-        //-------------------------------------
-        p3->getHeader()->setPreID ( getNodeID() );//Linyexion:設成自己
-        p3->getHeader()->setNexID ( BROADCAST_ID );//Linyexion:希望全部人收到
-        p3->getHeader()->setDstID ( BROADCAST_ID );//Linyexion:...
-        //pocket content
-        //counter++
-        l3->increase();
-        //children = 誰是轉發封包的人，可以在msg塞訊息
+        IoT_ctrl_header *h3 = nullptr;
+        h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader()); 
+        if(l3->getCounter() <= IoT_device_counter_recorder+1 && parent < h3->getPreID()){
+            parent = h3->getPreID();
+            h3->setPreID ( getNodeID() );//Linyexion:設成自己
+            h3->setNexID ( BROADCAST_ID );//Linyexion:希望全部人收到
+            h3->setDstID ( BROADCAST_ID );//Linyexion:...
+            //pocket content
+            //counter++
+            l3->increase();
+            //children = 誰是轉發封包的人，可以在msg塞訊息
+            IoT_device_counter_recorder = l3->getCounter();
+            send_handler(p3);
+            // unsigned mat = l3->getMatID();
+            // unsigned act = l3->getActID();
+            // string msg = l3->getMsg(); // get the msg
+        }
 
-        hi = true;
-        send_handler(p3);
-        // unsigned mat = l3->getMatID();
-        // unsigned act = l3->getActID();
-        // string msg = l3->getMsg(); // get the msg
     }
     else if (p->type() == "IoT_data_packet" ) { // the device receives a packet
         // cout << "node " << getNodeID() << " send the packet" << endl;
@@ -2119,15 +2120,11 @@ int main()
     cin>>Nodes>>Links>>simTime>>BFS_Start_Time>>Data_Trans_Time;
 
     node::node_generator::generate("IoT_sink", 0);
-    for(unsigned int id = 1; id<Nodes; id++){
-        node::node_generator::generate("IoT_device", id);
-    }
+
 
     // read the input and generate devices
-    for (unsigned int id = 0; id < 5; id ++){
-        
-        node::node_generator::generate("IoT_device",id);
-        
+    for(unsigned int id = 1; id<=Nodes; id++){
+        node::node_generator::generate("IoT_device", id);
     }
     
     // please generate the sink by yourself
@@ -2176,5 +2173,9 @@ int main()
     // cout << packet::getLivePacketNum() << endl;
 
     //for print out the parent
+    printf("0 0\n");
+    for(int i=1 ;i<=Nodes; i++){
+        
+    }
     return 0;
 }
