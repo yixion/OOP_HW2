@@ -1,0 +1,33 @@
+1. 我們有一個 IoT(Internet of things), 大範圍的物聯網
+2. 收集IoT上的data，傳送到sink上
+3. Internet work aggregation => 在每個節點做計算
+    (1)求最大值
+    (2)求最小值
+
+HW2
+1.我們要建立一個aggregation tree
+2.Construct a tree rooted at node 0
+3.Packet will logged out information automatically
+point:
+    1.Using distributed BFS with IoT_ctrl_packet(Counter is IoT_ctrl_packet, so IoT_ctrl_packet will plus one if it pass to next one device)
+    2.hop(Couter)最小，parent id最小的
+    3.每一個節點定義在IoT_device
+    4.每一個節點的generator定義在node的class裡
+        node::ndoe_generator::generator("IoT_device", id);
+    5.每一個節點都必須知道他的neighbors是誰
+        node::id_to_node(0)->add_phy_neighbor(1);
+        0的neighbor有1
+        雙向都有定義才會是雙向的
+task:
+    1.add an usigned integer to store the parent of each device in class IoT_device.
+    2.add a vector<unsigned int> to store the children of each device in class IoT_device.
+    3.define IoT_sink class => 複製IoT_device的內容 => 就可以建立連結 using node::id_to_node(0)->add_phy_neighbor(1);
+    4.IoT_data_packet_event，產生封包，並送封包，sr
+    5.寫recive handler，handle 接受到的packet
+
+condition:
+    1.絕對不能使用在 receive handler裡使用 node::id_to_node(id)
+    2.用getPhyNeighbors().find(n_id)可以拿到neighbor
+    3.用iterator 掃過所有節點neighbor
+    4.getNodeID()可以拿到現在node的Id
+    
