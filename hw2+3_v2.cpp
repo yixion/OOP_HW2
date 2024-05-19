@@ -861,7 +861,7 @@ class event {
         static unsigned int end_time;
         
         // get the next event
-        static event * get_next_event() ;
+        static event * get_next_event() ;// min heap
         static void add_event (event *e) { events.push(e); }
         static hash<string> event_seq;
         
@@ -1930,7 +1930,7 @@ void IoT_device::recv_handler (packet *p){
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());
         IoT_ctrl_header *h3 = nullptr;
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader()); 
-        if(l3->getCounter() <= IoT_device_counter_recorder+1 && parent < h3->getPreID()){
+        if(l3->getCounter() < IoT_device_counter_recorder ){
             parent = h3->getPreID();
             h3->setPreID ( getNodeID() );//Linyexion:設成自己
             h3->setNexID ( BROADCAST_ID );//Linyexion:希望全部人收到
@@ -1944,6 +1944,14 @@ void IoT_device::recv_handler (packet *p){
             // unsigned mat = l3->getMatID();
             // unsigned act = l3->getActID();
             // string msg = l3->getMsg(); // get the msg
+        }else if(l3->getCounter() == IoT_device_counter_recorder && parent < h3->getPreID()){//counter is the same compare the parent
+            parent = h3->getPreID();
+            h3->setPreID(getNodeID());
+            h3->setNexID(BROADCAST_ID);
+            h3->setDstID(BROADCAST_ID);
+
+            l3->increase();
+            send_handler(p3);
         }
 
     }
@@ -2112,7 +2120,7 @@ int main()
     // header::header_generator::print(); // print all registered headers
     // payload::payload_generator::print(); // print all registered payloads
     // packet::packet_generator::print(); // print all registered packets
-    node::node_generator::print(); // print all registered nodes
+    //node::node_generator::print(); // print all registered nodes
     // event::event_generator::print(); // print all registered events
     // link::link_generator::print(); // print all registered links 
 
@@ -2154,13 +2162,13 @@ int main()
     
     
     
-    AGG_ctrl_packet_event(4, 0, 250);
+    //AGG_ctrl_packet_event(4, 0, 250);
     // 1st parameter: the source node
     // 2nd parameter: the destination node (sink)
     // 3rd parameter: time (optional)
     // 4th parameter: msg (for storing nb list)
     
-    DIS_ctrl_packet_event(0, 260);
+    //DIS_ctrl_packet_event(0, 260);
     // 1st parameter: the source node (sink)
     // 2nd parameter: the destination node
     // 3rd parameter: parent 
@@ -2175,7 +2183,7 @@ int main()
     //for print out the parent
     printf("0 0\n");
     for(int i=1 ;i<=Nodes; i++){
-        
+
     }
     return 0;
 }
