@@ -778,7 +778,7 @@ class IoT_device: public node {
         IoT_device() {} // it should not be used
         IoT_device(IoT_device&) {} // it should not be used
         IoT_device(unsigned int _id): node(_id), IoT_device_counter_recorder(UINT_MAX), parent(UINT_MAX){} // this constructor cannot be directly called by users
-    
+
     public:
         ~IoT_device(){}
         string type() { return "IoT_device"; }
@@ -1937,7 +1937,7 @@ void IoT_device::recv_handler (packet *p){
         if(l3->getMsg() == "Children change")
         {
             h3->getPreID();
-            auto it = find(children.begin(), children.end(), h3);
+            auto it = find(children.begin(), children.end(), h3->getPreID());
             if(it != children.end()){
                 children.erase(it);
             }
@@ -1969,7 +1969,6 @@ void IoT_device::recv_handler (packet *p){
                 if(parent != it->first){
                     children.push_back(it->first);
                 }
-                //children = 誰是轉發封包的人，可以在msg塞訊息
             }            
             
         }
@@ -1980,11 +1979,21 @@ void IoT_device::recv_handler (packet *p){
         {//counter is the same compare the parent
             parent = h3->getPreID();
             h3->setPreID(getNodeID());
-            h3->setNexID(BROADCAST_ID);
-            h3->setDstID(BROADCAST_ID);
-
             l3->increase();
-            send_handler(p3);
+            const map<unsigned int, bool> &nblist = getPhyNeighbors();
+            for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end();it++)
+            {
+                h3->setNexID(it->first);//Linyexion:希望全部人收到
+                h3->setDstID(it->first);//Linyexion:...
+                send_handler(p3);
+                // unsigned mat = l3->getMatID();
+                // unsigned act = l3->getActID();
+                // string msg = l3->getMsg(); // get the msg
+                // store the children
+                if(parent != it->first){
+                    children.push_back(it->first);
+                }
+            } 
         }
         //-----------------------------------------------------------
     }
@@ -2061,22 +2070,34 @@ void IoT_sink::recv_handler(packet *p){
     if (p == nullptr) return ;
     
     if (p->type() == "IoT_ctrl_packet" && !hi ) { // the device receives a packet from the sink
-        //packet content
+        // get packet content
         IoT_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<IoT_ctrl_packet*> (p);
         IoT_ctrl_payload *l3 = nullptr;//Linyexion:store the message
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());
-        
-        p3->getHeader()->setPreID ( getNodeID() );//Linyexion:設成自己
-        p3->getHeader()->setNexID ( BROADCAST_ID );//Linyexion:希望全部人收到
-        p3->getHeader()->setDstID ( BROADCAST_ID );//Linyexion:...
-        //pocket content
-        //counter++
+        if(l3->getMsg() == "Children change")
+        {
+            p3->getHeader()->getPreID();
+            auto it = find(children.begin(), children.end(), p3->getHeader()->getPreID());
+            if(it != children.end()){
+                children.erase(it);
+            }
+        }
+        // set packet content and send it
+        p3->getHeader()->setPreID( getNodeID() );//Linyexion:設成自己
+        // counter++
         l3->increase();
+        const map<unsigned int, bool> &nblist = getPhyNeighbors();
+        for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end(); it++){
+            p3->getHeader()->setNexID(it->first);//Linyexion:希望鄰居收到
+            p3->getHeader()->setDstID(it->first);//Linyexion:...
+            send_handler(p3);
+            children.push_back(it->first);
+        }  
         //children = 誰是轉發封包的人，可以在msg塞訊息
 
         hi = true;
-        send_handler(p3);
+        
         // unsigned mat = l3->getMatID();
         // unsigned act = l3->getActID();
         // string msg = l3->getMsg(); // get the msg
@@ -2222,7 +2243,7 @@ int main()
     //for print out the parent
     printf("0 0\n");
     for(int i=1 ;i<=Nodes; i++){
-
+        cout<<i<<" ";
     }
     return 0;
 }
