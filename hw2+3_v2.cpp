@@ -1950,7 +1950,7 @@ void IoT_device::recv_handler (packet *p){
             // unsigned act = l3->getActID();
             // string msg = l3->getMsg(); // get the msg
         }
-        
+
         //case 2 the cost is the same, then compare their cost.
         else if(l3->getCounter() + 1 == IoT_device_counter_recorder && parent < h3->getPreID())
         {//counter is the same compare the parent
@@ -2132,7 +2132,7 @@ int main()
     // event::event_generator::print(); // print all registered events
     // link::link_generator::print(); // print all registered links 
 
-    //Linyexion:cin #Nodes #Links
+    //Linyexion:cin #Nodes #Links #simulator time #BFS start time #Data Translation time
     cin>>Nodes>>Links>>simTime>>BFS_Start_Time>>Data_Trans_Time;
 
     node::node_generator::generate("IoT_sink", 0);
@@ -2146,15 +2146,21 @@ int main()
     // please generate the sink by yourself
     
     
-    // set devices' neighbors
-    for(int i=0; i<Links; i++){
+    // set devices' neighbors--------------------------------------
+    // example:
+    //      node::id_to_node(0)->add_phy_neighbor(1); 0->1
+    //      node::id_to_node(1)->add_phy_neighbor(0); 1->0         
+    for(int i=0; i<Links; i++)
+    {
         int temp1, temp2, temp3;
         cin>>temp1>>temp2>>temp3;
         node::id_to_node(temp2)->add_phy_neighbor(temp3);
         node::id_to_node(temp3)->add_phy_neighbor(temp2);
     }
-        
-    // node 0 broadcasts a msg with counter 0 at time 100
+    //-------------------------------------------------------------
+
+    // IoT_data_packet will be generated for a source(src) and send to a destination(dst) at time t
+    // node 0 broadcasts a msg with counter 0 at time BFS_Start_Time
     IoT_ctrl_packet_event(0, BFS_Start_Time);
     // 1st parameter: the source; the destination that want to broadcast a msg with counter 0 (i.e., match ID)
     // 2nd parameter: time (optional)
