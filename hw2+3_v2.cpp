@@ -1936,19 +1936,22 @@ void IoT_device::recv_handler (packet *p){
         // case 1 the cost is less than the previous packet
         if(l3->getCounter() + 1 < IoT_device_counter_recorder)
         {
-            parent = h3->getPreID();
-            h3->setPreID ( getNodeID() );//Linyexion:設成自己
-            h3->setNexID ( BROADCAST_ID );//Linyexion:希望全部人收到
-            h3->setDstID ( BROADCAST_ID );//Linyexion:...
             //pocket content
+            parent = h3->getPreID();
             //counter++
             l3->increase();
+            h3->setPreID ( getNodeID() );//Linyexion:設成自己
+            const map<unsigned int, bool> &nblist = getPhyNeighbors();
+            for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end();it++){
+                h3->setNexID(it->first);//Linyexion:希望全部人收到
+                h3->setDstID(it->first);//Linyexion:...
+                send_handler(p3);
+                // unsigned mat = l3->getMatID();
+                // unsigned act = l3->getActID();
+                // string msg = l3->getMsg(); // get the msg
+            }            
             //children = 誰是轉發封包的人，可以在msg塞訊息
             IoT_device_counter_recorder = l3->getCounter();
-            send_handler(p3);
-            // unsigned mat = l3->getMatID();
-            // unsigned act = l3->getActID();
-            // string msg = l3->getMsg(); // get the msg
         }
 
         //case 2 the cost is the same, then compare their cost.
