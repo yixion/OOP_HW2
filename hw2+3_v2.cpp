@@ -787,6 +787,8 @@ class IoT_device: public node {
         // please define recv_handler function to deal with the incoming packet
         virtual void recv_handler (packet *p);
         GET(get_parent, unsigned int, parent);
+        void get_children(unsigned int parent);
+        bool child_is_empty(){return children.empty();}
         // void add_one_hop_neighbor (unsigned int n_id) { one_hop_neighbors[n_id] = true; }
         // unsigned int get_one_hop_neighbor_num () { return one_hop_neighbors.size(); }
         
@@ -805,6 +807,13 @@ class IoT_device: public node {
         };
 };
 IoT_device::IoT_device_generator IoT_device::IoT_device_generator::sample;
+void IoT_device::get_children(unsigned int parent){
+    cout<< parent<< "'s children :";
+    for(vector<unsigned int>::iterator it = children.begin(); it!=children.end();it++){
+        cout<<" "<< *it;
+    }
+    cout<<endl;
+}
 
 // Linyexion create------------------------------------------------------------------------------------------------------
 class IoT_sink: public node {
@@ -825,7 +834,7 @@ class IoT_sink: public node {
         
         // void add_one_hop_neighbor (unsigned int n_id) { one_hop_neighbors[n_id] = true; }
         // unsigned int get_one_hop_neighbor_num () { return one_hop_neighbors.size(); }
-        
+        void get_children(unsigned int parent);
         class IoT_sink_generator;
         friend class IoT_sink_generator;
         // IoT_sink is derived from node_generator to generate a node
@@ -841,6 +850,13 @@ class IoT_sink: public node {
         };
 };
 IoT_sink::IoT_sink_generator IoT_sink::IoT_sink_generator::sample;
+void IoT_sink::get_children(unsigned int parent){
+    cout<< parent<< "'s children :";
+    for(vector<unsigned int>::iterator it = children.begin(); it!=children.end();it++){
+        cout<<" "<< *it;
+    }
+    cout<<endl;
+}
 
 // -------------------------------------------------------------------------------------------------------------------
 
@@ -1931,101 +1947,84 @@ void IoT_device::recv_handler (packet *p){
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader());// ....
         //-----------------------------------------------------------
 
-        // case 1 message for children change------------------------
+        // deal message------------------------
+        if(l3->getMsg() == "I'm your child"){
+            auto it = find(children.begin(), children.end(), h3->getPreID());
+            children.push_back(h3->getPreID());
+            return;
+        }
+        if(l3->getMsg() == "Child change")
+        {
+            auto it = find(children.begin(), children.end(), h3->getPreID());
+            if(it != children.end())
+                children.erase(it);
+            else{
+                send_handler(p3);
+            }
+            return;
+        }
+        //-----------------------------------------------------------
+        // send packet-----------------------------------------------
         if(parent == UINT_MAX)
         {
             // record the cost
             IoT_device_counter_recorder = l3->getCounter();
+            l3 -> increase();//counter++
             // packet content
             // manipulate the parent stuff
             parent = h3->getPreID();
-            // counter++
-            l3->increase();
-            h3->setPreID ( getNodeID() );//Linyexion:設成自己
+            h3->setPreID(getNodeID());//Linyexion:設成自己
             // broadcast to the neighbor
             const map<unsigned int, bool> &nblist = getPhyNeighbors();
             for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end();it++)
             {
-                h3->setNexID(it->first);// Linyexion:希望全部人收到
-                h3->setDstID(it->first);// Linyexion:...
-                l3->setMsg("Yeah!");
-                send_handler(p3);
-                // unsigned mat = l3->getMatID();
-                // unsigned act = l3->getActID();
-                // string msg = l3->getMsg(); // get the msg
-                // store the children
-                if(parent != it->first){
-                    children.push_back(it->first);
+                h3->setNexID(it->first);
+                h3->setDstID(it->first);
+                if(parent == it->first && parent != 0){
+                    // store the children
+                    l3->setMsg("I'm your child");
+                    send_handler(p3);
+                    // unsigned mat = l3->getMatID();
+                    // unsigned act = l3->getActID();
+                    // string msg = l3->getMsg(); // get the msg
+                }else if(it->first != 0){
+                    l3->setMsg("");
+                    send_handler(p3);
                 }
             } 
-        }
-        //-----------------------------------------------------------
-
-        // case 2 message for children change------------------------
-        if(l3->getMsg() == "Children change")
-        {
-            h3->getPreID();
-            auto it = find(children.begin(), children.end(), h3->getPreID());
-            if(it != children.end()){
-                children.erase(it);
-            }
-        }
-        //-----------------------------------------------------------
-
-        // case 3 the cost is less than the previous packet----------
-        else if(l3->getCounter() + 1 < IoT_device_counter_recorder)
-        {
+        }else if(l3->getCounter() < IoT_device_counter_recorder || (l3->getCounter() == IoT_device_counter_recorder && parent > h3->getPreID()))
+        {   
+            //less than the previous packet & cost is the same and preID is smaller than parent
             //record the cost
             IoT_device_counter_recorder = l3->getCounter();
+            l3 -> increase();//counter++
             //pocket content
             //manipulate the parent stuff
+            unsigned int oldparent = parent;
             parent = h3->getPreID();
-            //counter++
-            l3->increase();
-            h3->setPreID ( getNodeID() );//Linyexion:設成自己
+            h3->setPreID(getNodeID());//Linyexion:設成自己
             //broadcast to the neighbor
             const map<unsigned int, bool> &nblist = getPhyNeighbors();
             for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end();it++)
             {
                 h3->setNexID(it->first);// Linyexion:希望全部人收到
                 h3->setDstID(it->first);// Linyexion:...
-                l3->setMsg("Children change");
-                send_handler(p3);
                 // unsigned mat = l3->getMatID();
                 // unsigned act = l3->getActID();
                 // string msg = l3->getMsg(); // get the msg
                 // store the children
-                if(parent != it->first){
-                    children.push_back(it->first);
+                if(parent == it->first){
+                    l3->setMsg("I'm your child");
+                    send_handler(p3);
+                }else if(oldparent == it->first){
+                    l3->setMsg("Child change");
+                    send_handler(p3);
+                }else if(it->first != 0){
+                    l3->setMsg("");
+                    send_handler(p3);
                 }
             }            
-            
         }
-        //-----------------------------------------------------------
-
-        //case 4 the cost is the same, then compare their cost.------
-        else if(l3->getCounter() + 1 == IoT_device_counter_recorder && parent < h3->getPreID())
-        {//counter is the same compare the parent
-            parent = h3->getPreID();
-            h3->setPreID(getNodeID());
-            l3->increase();
-            const map<unsigned int, bool> &nblist = getPhyNeighbors();
-            for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end();it++)
-            {
-                h3->setNexID(it->first);//Linyexion:希望全部人收到
-                h3->setDstID(it->first);//Linyexion:...
-                l3->setMsg("Children change");
-                send_handler(p3);
-                // unsigned mat = l3->getMatID();
-                // unsigned act = l3->getActID();
-                // string msg = l3->getMsg(); // get the msg
-                // store the children
-                if(parent != it->first){
-                    children.push_back(it->first);
-                }
-            } 
-        }
-        //-----------------------------------------------------------
     }
     else if (p->type() == "IoT_data_packet" ) { // the device receives a packet
         // cout << "node " << getNodeID() << " send the packet" << endl;
@@ -2100,37 +2099,39 @@ void IoT_sink::recv_handler(packet *p){
     if (p == nullptr) return ;
     
     if (p->type() == "IoT_ctrl_packet") { // the device receives a packet from the sink
-        // get packet content
+        // get packet content---------------------------------------
         IoT_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<IoT_ctrl_packet*> (p);
         IoT_ctrl_payload *l3 = nullptr;//Linyexion:store the message
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());
         IoT_ctrl_header *h3 = nullptr;
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader());
-        if(l3->getMsg() == "Children change")
-        {
-            auto it = find(children.begin(), children.end(), h3->getPreID());
-            if(it != children.end()){
-                children.erase(it);
-            }
-        }
-        // set packet content and send it
-        h3->setPreID( getNodeID() );//Linyexion:設成自己
+        // set packet content and send it---------------------------
+        h3->setPreID(getNodeID());//Linyexion:設成自己
         // counter++
         l3->increase();
         const map<unsigned int, bool> &nblist = getPhyNeighbors();
         for(map<unsigned int, bool>::const_iterator it = nblist.begin(); it!=nblist.end(); it++){
             h3->setNexID(it->first);//Linyexion:希望鄰居收到
             h3->setDstID(it->first);//Linyexion:...
-            send_handler(p3);
             children.push_back(it->first);
-        }    
+            send_handler(p3);
+        }
         // unsigned mat = l3->getMatID();
         // unsigned act = l3->getActID();
         // string msg = l3->getMsg(); // get the msg
+
     }
     else if (p->type() == "IoT_data_packet" ) { // the device receives a packet
-        // cout << "node " << getNodeID() << " send the packet" << endl;
+        // get packet content---------------------------------------
+        IoT_data_packet *p3 = nullptr;
+        p3 = dynamic_cast<IoT_data_packet*> (p);
+        IoT_data_payload *l3 = nullptr;//Linyexion:store the message
+        l3 = dynamic_cast<IoT_data_payload*> (p3->getPayload());
+        IoT_data_header *h3 = nullptr;
+        h3 = dynamic_cast<IoT_data_header*> (p3->getHeader());
+        // set packet content and send it---------------------------
+
     }
     else if (p->type() == "AGG_ctrl_packet") {
         AGG_ctrl_packet *p3 = nullptr;
@@ -2201,7 +2202,7 @@ int main()
     // header::header_generator::print(); // print all registered headers
     // payload::payload_generator::print(); // print all registered payloads
     // packet::packet_generator::print(); // print all registered packets
-    node::node_generator::print(); // print all registered nodes
+    // node::node_generator::print(); // print all registered nodes
     // event::event_generator::print(); // print all registered events
     // link::link_generator::print(); // print all registered links 
 
@@ -2241,7 +2242,10 @@ int main()
     
     // node 4 sends a packet to node 0 at time 200 --> you need to implement routing tables for IoT_devicees
     //Linyexion: we need to write a for loop
-    IoT_data_packet_event(4, 0, Data_Trans_Time); // IoT_data_packet
+    for(int i=1; i<Nodes; i++){
+        IoT_data_packet_event(i, 0, Data_Trans_Time);
+    }
+    // ex:IoT_data_packet_event(4, 0, Data_Trans_Time); // IoT_data_packet
     // 1st parameter: the source node
     // 2nd parameter: the destination node (sink)
     // 3rd parameter: time (optional)
@@ -2274,5 +2278,15 @@ int main()
         output = dynamic_cast<IoT_device*>(node::id_to_node(i));
         cout<<i<<" "<<output->get_parent()<<endl;
     }
+
+    // check children in the device
+    // IoT_sink *output;
+    // output = dynamic_cast<IoT_sink*>(node::id_to_node(0));
+    // output->get_children(0);
+    // for(int i=1; i<Nodes; i++){
+    //     IoT_device *output;
+    //     output = dynamic_cast<IoT_device*>(node::id_to_node(i));
+    //     output->get_children(i);
+    // }
     return 0;
 }
