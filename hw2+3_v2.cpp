@@ -775,7 +775,6 @@ class IoT_device: public node {
         unsigned int parent;
         vector<unsigned int> children;
         map<unsigned int, bool> own_receive_table;
-        vector<packet*> waiting_list;
         bool waiting;
         //----------------------------
     protected:
@@ -1951,20 +1950,31 @@ void IoT_device::recv_handler (packet *p){
         const map<unsigned int, bool> &nblist = getPhyNeighbors();
         if(nblist.find(h3->getPreID()) == nblist.end()) return;
         // deal message----------------------------------------------
-        if(l3->getMsg() == "I'm your child")
-        {
-            children.push_back(h3->getPreID());
-            return;
-        }
-        if(l3->getMsg() == "Child change")
-        {
-            auto it = find(children.begin(), children.end(), h3->getPreID());
+        string current_device = to_string(getNodeID());
+
+        if(l3->getMsg() == current_device){
+            auto it = find(children.begin(), children.end(), -h3->getPreID());
             if(it != children.end())
                 children.erase(it);
-            else{
-                send_handler(p3);
-            }
+            else
+                children.push_back(h3->getPreID());
             return;
+        }
+        if(l3->getMsg().length() >= current_device.length())
+        {
+            if(l3->getMsg().substr(0,current_device.length()) == current_device)
+            {
+                auto it = find(children.begin(), children.end(), h3->getPreID());
+                if(it != children.end())
+                    children.erase(it);
+                else
+                    children.push_back(-(h3->getPreID()));
+                return;
+            }
+            else if(l3->getMsg().substr(l3->getMsg().length() - current_device.length(), current_device.length()) == current_device){
+                children.push_back(h3->getPreID());
+                return;
+            }
         }
         // send packet-----------------------------------------------
         if(parent == UINT_MAX)
@@ -1975,15 +1985,11 @@ void IoT_device::recv_handler (packet *p){
             // packet content
             // manipulate the parent stuff
             parent = h3->getPreID();
-            h3->setPreID(getNodeID());//Linyexion:設成自己
-            h3->setNexID(parent);
-            h3->setDstID(parent);
-            l3->setMsg("I'm your child");
-            send_handler(p3);
+            h3->setPreID(getNodeID());
             // broadcast to the neighbor
             h3->setNexID(BROADCAST_ID);
             h3->setDstID(BROADCAST_ID);
-            l3->setMsg("I'm your parent");
+            l3->setMsg(to_string(parent));
             send_handler(p3);
             // unsigned mat = l3->getMatID();
             // unsigned act = l3->getActID();
@@ -1999,20 +2005,14 @@ void IoT_device::recv_handler (packet *p){
             unsigned int old_parent = parent;
             parent = h3->getPreID();
             h3->setPreID(getNodeID());//Linyexion:設成自己
-            h3->setNexID(old_parent);
-            h3->setDstID(old_parent);
-            l3->setMsg("Child change");
-            send_handler(p3);
-            h3->setNexID(parent);
-            h3->setDstID(parent);
-            l3->setMsg("I'm your child");
-            send_handler(p3);
             h3->setNexID(BROADCAST_ID);
             h3->setDstID(BROADCAST_ID);
-            l3->setMsg("I'm your parent");        
+            l3->setMsg(to_string(old_parent) + to_string(parent));   
+            send_handler(p3);     
         }
     }
     else if (p->type() == "IoT_data_packet" ) { // the device receives a packet
+
         // get packet content---------------------------------------
         IoT_data_packet *p3 = nullptr;
         p3 = dynamic_cast<IoT_data_packet*> (p);
@@ -2022,6 +2022,7 @@ void IoT_device::recv_handler (packet *p){
         h3 = dynamic_cast<IoT_data_header*> (p3->getHeader());
 
         // determine whether it is leaf or nonleaf------------------
+        // like fork() > is parent < is child, but in this situation empty is that identifier.
         if(!children.empty() && !waiting){
             for(vector<unsigned int>::const_iterator temp = children.begin(); temp != children.end(); temp++){
                 own_receive_table[*temp] = false;
@@ -2029,27 +2030,24 @@ void IoT_device::recv_handler (packet *p){
             waiting = true;
             return;
         }
-        else
+        else if(children.empty())
         {
             h3->setSrcID(getNodeID());
-            h3->setNexID(get_parent());
             h3->setPreID(getNodeID());
+            h3->setNexID(get_parent());
             send_handler(p3);
             return;
         }
         
         // set packet content and send it---------------------------
         own_receive_table[h3->getPreID()] = true;
-        h3->setPreID(getNodeID());
-        h3->setNexID(get_parent());
-        waiting_list.push_back(p3);
         for(map<unsigned int, bool>::const_iterator temp = own_receive_table.begin(); temp!= own_receive_table.end(); temp++){
             if(!temp->second)
                 return;
         }
-        for(vector<packet*>::const_iterator temp = waiting_list.begin(); temp!=waiting_list.end(); temp++){
-            send_handler(*temp);
-        }
+        h3->setPreID(getNodeID());
+        h3->setNexID(get_parent());
+        send_handler(p3);
     }
     else if (p->type() == "AGG_ctrl_packet") {
         AGG_ctrl_packet *p3 = nullptr;
@@ -2130,15 +2128,14 @@ void IoT_sink::recv_handler(packet *p){
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader());
 
         //deal message----------------------------------------------
-        if(l3->getMsg() == "I'm your child"){
+        if(l3->getMsg() == to_string(getNodeID())){
             children.push_back(h3->getPreID());
             return;
         }
-        if(l3->getMsg() == "I'm your parent" && l3->getMsg() == "Child change") return;
+        if(l3->getMsg() == "Child change") return;
 
         // set packet content and send it---------------------------
         h3->setPreID(getNodeID());//Linyexion:設成自己
-        h3->setSrcID(getNodeID());
         h3->setDstID(BROADCAST_ID);
         h3->setNexID(BROADCAST_ID);
         
@@ -2273,13 +2270,13 @@ int main()
     
     
     
-    AGG_ctrl_packet_event(4, 0, 250);
+    //AGG_ctrl_packet_event(4, 0, 250);
     // 1st parameter: the source node
     // 2nd parameter: the destination node (sink)
     // 3rd parameter: time (optional)
     // 4th parameter: msg (for storing nb list)
     
-    DIS_ctrl_packet_event(0, 260);
+    //DIS_ctrl_packet_event(0, 260);
     // 1st parameter: the source node (sink)
     // 2nd parameter: the destination node
     // 3rd parameter: parent 
