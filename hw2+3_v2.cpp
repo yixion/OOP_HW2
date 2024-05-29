@@ -1946,10 +1946,11 @@ void IoT_device::recv_handler (packet *p){
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());// downcastin to the IoT_ctrl_payload
         IoT_ctrl_header *h3 = nullptr;
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader());// ....
-        int counter = l3->getCounter();
+        unsigned int counter = l3->getCounter();
         //if it's not neighbor reject -------------------------------
         const map<unsigned int, bool> &nblist = getPhyNeighbors();
         if(nblist.find(h3->getPreID()) == nblist.end()) return;
+
         // deal message----------------------------------------------
         string current_device = to_string(getNodeID());
         string message = l3->getMsg();
