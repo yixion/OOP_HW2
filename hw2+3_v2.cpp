@@ -775,6 +775,7 @@ class IoT_device: public node {
         unsigned int parent; // I use UINT_MAX as undefine symbol
         vector<int> children;
         map<unsigned int, bool> own_receive_table;
+        stack<pair<unsigned, string>> async_register;
         bool waiting;
         //----------------------------
     protected:
@@ -837,6 +838,7 @@ class IoT_sink: public node {
         // void add_one_hop_neighbor (unsigned int n_id) { one_hop_neighbors[n_id] = true; }
         // unsigned int get_one_hop_neighbor_num () { return one_hop_neighbors.size(); }
         void get_children(unsigned int parent);
+        GET(get_parent, unsigned int, parent);
         class IoT_sink_generator;
         friend class IoT_sink_generator;
         // IoT_sink is derived from node_generator to generate a node
@@ -1946,49 +1948,15 @@ void IoT_device::recv_handler (packet *p){
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());// downcastin to the IoT_ctrl_payload
         IoT_ctrl_header *h3 = nullptr;
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader());// ....
-        unsigned int counter = l3->getCounter();
+        // unsigned int counter = l3->getCounter();
+
         //if it's not neighbor reject -------------------------------
         const map<unsigned int, bool> &nblist = getPhyNeighbors();
         if(nblist.find(h3->getPreID()) == nblist.end()) return;
-
-        // deal message----------------------------------------------
-        string current_device = to_string(getNodeID());
-        string message = l3->getMsg();
-        int msg_length = message.length();
-        int child = (int)(h3->getPreID());
-        if(message == current_device)
+        // first time get packet
+        if(l3->getMsg() == "Initial packet")
         {
-            auto it = find(children.begin(), children.end(), -child);
-            if(it != children.end())
-                children.erase(it);
-            else
-                children.push_back(child);
-            return;
-        }
-        else if(message[0] == 'c')
-        {
-            if(msg_length - 2 >= current_device.length())
-            {
-                if(message.substr(2,current_device.length()) == current_device)// old parent discard the child
-                {
-                    auto it = find(children.begin(), children.end(), child);
-                    if(it != children.end())
-                        children.erase(it);
-                    else
-                        children.push_back(-child);
-                }
-                else if(message.substr(msg_length - current_device.length(), current_device.length()) == current_device) // new parent 
-                {
-                    children.push_back(child);
-                    return;
-                }
-            }
-        }
-
-        // send packet-----------------------------------------------
-        if(parent == UINT_MAX) // IoT_device doesn't have parent yet.
-        {
-            // record the cost
+            unsigned int counter = l3->getCounter();
             IoT_device_counter_recorder = counter;
             l3 -> increase();//counter++
             // manipulate the parent stuff
@@ -1997,31 +1965,99 @@ void IoT_device::recv_handler (packet *p){
             // broadcast to the neighbor those are the potential children.
             h3->setNexID(BROADCAST_ID);
             h3->setDstID(BROADCAST_ID);
-            l3->setMsg(to_string(parent)); // "parent_id"
+            l3->setMsg(to_string(counter) + " " + to_string(parent)); // "parent_id"
             send_handler(p3);
+            return;
             // unsigned mat = l3->getMatID();
             // unsigned act = l3->getActID();
             // string msg = l3->getMsg();
-        } 
-        else if(counter < IoT_device_counter_recorder || (counter == IoT_device_counter_recorder && parent > h3->getPreID()))
-        {   // saying that my parent have changed.
-            // less than the previous packet || cost is the same && preID is smaller than parent
-            // record the cost
-            IoT_device_counter_recorder = counter;
-            l3 -> increase();//counter++
-            // pocket content
-            // manipulate the parent stuff
-            unsigned int old_parent = parent;
-            parent = h3->getPreID();
-            // send packet from this IoT_device
-            h3->setPreID(getNodeID());
-            // broadcast the packet to every IoT_device.
-            h3->setNexID(BROADCAST_ID);
-            h3->setDstID(BROADCAST_ID);
-            // "c old_parent_id parent_id"
-            l3->setMsg("c "+ to_string(old_parent) + " " + to_string(parent)); 
-            send_handler(p3);     
         }
+        
+        string current_device = to_string(getNodeID());
+        // message 0: counter 1: c/parent=>push child 2:old_parent 3:parent 4.child in the end
+        pair<unsigned int, string> waiting_packet(h3->getPreID(), l3->getMsg());
+        async_register.push(waiting_packet);
+        bool stuck = false;
+        while(!async_register.empty())
+        {
+            // deal message----------------------------------------------
+            auto deal_packet = async_register.top();
+            async_register.pop();
+            string s;
+            stringstream input(deal_packet.second);
+            vector<string> temp;
+            while(getline(input, s,' ')){
+                temp.push_back(s);
+            }
+            int child = (int)deal_packet.first;
+            if(temp[1] == current_device){
+                children.push_back(child);
+                continue;
+            }
+            else if(temp[1] == "c")
+            {
+                if(temp[2] == current_device)
+                {
+                    auto it = find(children.begin(), children.end(), child);
+                    if(it != children.end())
+                    {
+                        children.erase(it);    
+                    }
+                    else
+                    {
+                        async_register.push(deal_packet);
+                        return;
+                    }
+                }
+                else if(temp[3] == current_device)
+                {
+                    children.push_back(child);
+                    continue;
+                }
+            }
+            unsigned int counter = l3->getCounter();
+            if(parent == UINT_MAX) 
+            {   // IoT_device doesn't have parent yet.
+                // record the cost
+                IoT_device_counter_recorder = counter;
+                if(!stuck)
+                    l3->increase();//counter++
+                // manipulate the parent stuff
+                parent = deal_packet.first; // I should set my parent to preID() from this packet.
+                h3->setPreID(getNodeID());
+                // broadcast to the neighbor those are the potential children.
+                h3->setNexID(BROADCAST_ID);
+                h3->setDstID(BROADCAST_ID);
+                l3->setMsg(to_string(counter)+ " " + to_string(parent)); // "parent_id"
+                send_handler(p3);
+                // unsigned mat = l3->getMatID();
+                // unsigned act = l3->getActID();
+                // string msg = l3->getMsg();
+            }
+            else if(counter < IoT_device_counter_recorder || (counter == IoT_device_counter_recorder && parent > deal_packet.first))
+            {   // change parent
+                // case1 : less than the previous packet
+                // case2 : cost is the same && preID is smaller than parent
+                // record the cost
+                IoT_device_counter_recorder = counter;
+                if(!stuck)
+                    l3->increase();//counter++
+                // pocket content
+                // the message content : "c old_parent_id parent_id"
+                // c is the message type which is called "child have changed!"
+                unsigned int old_parent = parent;
+                parent = deal_packet.first;
+                l3->setMsg(to_string(counter)+ " c "+ to_string(old_parent) + " " + to_string(parent));
+                // send packet from this IoT_device
+                h3->setPreID(getNodeID());
+                // broadcast the packet to every IoT_device.
+                h3->setNexID(BROADCAST_ID);
+                h3->setDstID(BROADCAST_ID);
+                send_handler(p3);     
+            }            
+
+        }
+        stuck = true;
     }
     else if (p->type() == "IoT_data_packet" ) { // the device receives a packet
 
@@ -2035,10 +2071,18 @@ void IoT_device::recv_handler (packet *p){
 
         // determine whether it is leaf or nonleaf------------------
         // like fork() > is parent < is child, but in this situation empty is that identifier.
-        if(waiting)
-        {
+        if(children.empty())
+        {   // Once this node is leaf send the message
+            h3->setSrcID(getNodeID());
+            h3->setPreID(getNodeID());
+            h3->setNexID(get_parent());
+            send_handler(p3);
+        }
+        else if(waiting)
+        {   
             // set packet content and send it---------------------------
             own_receive_table[h3->getPreID()] = true;
+            // check routing table
             for(map<unsigned int, bool>::const_iterator temp = own_receive_table.begin(); temp!= own_receive_table.end(); temp++){
                 if(!temp->second)
                     return;
@@ -2048,19 +2092,14 @@ void IoT_device::recv_handler (packet *p){
             send_handler(p3);
         }
         else if(!children.empty() && !waiting)
-        {
+        {   // case that it is nonleaf node
+            // build the routing table
+            // start waiting until all element in the routing table become true
             for(vector<int>::const_iterator temp = children.begin(); temp != children.end(); temp++)
             {
                 own_receive_table[(unsigned int)(*temp)] = false;
             }
             waiting = true;
-        }
-        else if(children.empty())
-        {
-            h3->setSrcID(getNodeID());
-            h3->setPreID(getNodeID());
-            h3->setNexID(get_parent());
-            send_handler(p3);
         }
     }
     else if (p->type() == "AGG_ctrl_packet") {
@@ -2136,20 +2175,27 @@ void IoT_sink::recv_handler(packet *p){
         // get packet content---------------------------------------
         IoT_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<IoT_ctrl_packet*> (p);
-        IoT_ctrl_payload *l3 = nullptr;//Linyexion:store the message
+        IoT_ctrl_payload *l3 = nullptr;
         l3 = dynamic_cast<IoT_ctrl_payload*> (p3->getPayload());
         IoT_ctrl_header *h3 = nullptr;
         h3 = dynamic_cast<IoT_ctrl_header*> (p3->getHeader());
         string current_device = to_string(getNodeID());
         string message = l3->getMsg();
+        string s;
+        stringstream input(message);
+        vector<string> temp;
+        while(getline(input, s, ' '))
+        {
+            temp.push_back(s);
+        }
         //deal message----------------------------------------------
         if(message == "default"){
             // starting point, rout send the packet to its potential children.
             // set packet content and send it---------------------------
-            h3->setPreID(getNodeID());//Linyexion:設成自己
+            h3->setPreID(getNodeID());
             h3->setDstID(BROADCAST_ID);
             h3->setNexID(BROADCAST_ID);
-            
+            l3->setMsg("Initial packet");
             // counter++
             l3->increase();
             send_handler(p3);
@@ -2157,7 +2203,8 @@ void IoT_sink::recv_handler(packet *p){
             // unsigned act = l3->getActID();
             // string msg = l3->getMsg(); // get the msg
         }
-        else if(message == current_device){
+        else if(temp[1] == current_device)
+        {
             children.push_back((int)(h3->getPreID()));
             return;
         }
@@ -2274,7 +2321,6 @@ int main()
     // 3rd parameter: msg for debug information (optional)
     
     // node 4 sends a packet to node 0 at time 200 --> you need to implement routing tables for IoT_devicees
-    //Linyexion: we need to write a for loop
     for(int i=1; i<Nodes; i++){
         IoT_data_packet_event(i, 0, Data_Trans_Time);
     }
@@ -2305,13 +2351,17 @@ int main()
     // cout << packet::getLivePacketNum() << endl;
 
     //for print out the parent
-    printf("0 0\n");
+    IoT_sink *root;
+    root = dynamic_cast<IoT_sink*>(node::id_to_node(0));
+    cout<<0<<" "<<root->get_parent()<<endl;
     for(int i=1 ;i<Nodes; i++){
         IoT_device *output;
         output = dynamic_cast<IoT_device*>(node::id_to_node(i));
-        cout<<i<<" "<<output->get_parent()<<endl;
+        if(output->get_parent() == UINT_MAX)
+            cout<<i<<endl;
+        else
+            cout<<i<<" "<<output->get_parent()<<endl;
     }
-
     // check children in the device
     // IoT_sink *output;
     // output = dynamic_cast<IoT_sink*>(node::id_to_node(0));
