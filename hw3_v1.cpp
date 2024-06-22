@@ -776,7 +776,9 @@ class IoT_device: public node {
         vector<int> children;
         map<unsigned int, bool> own_receive_table;
         stack<pair<unsigned, string>> async_register;
+        map<unsigned int, unsigned int> reverse_path;
         bool waiting;
+        int info_size;
         //----------------------------
     protected:
         IoT_device() {} // it should not be used
@@ -790,6 +792,7 @@ class IoT_device: public node {
         // please define recv_handler function to deal with the incoming packet
         virtual void recv_handler (packet *p);
         GET(get_parent, unsigned int, parent);
+        SET(set_info_size, int, info_size, size);
         void get_children(unsigned int parent);
         bool child_is_empty(){return children.empty();}
         // void add_one_hop_neighbor (unsigned int n_id) { one_hop_neighbors[n_id] = true; }
@@ -823,6 +826,7 @@ class IoT_sink: public node {
         // map<unsigned int,bool> one_hop_neighbors; // you can use this variable to record the node's 1-hop neighbors 
         unsigned int parent;
         vector<unsigned int> children; 
+        int info_size;
     protected:
         IoT_sink() {} // it should not be used
         IoT_sink(IoT_sink&) {} // it should not be used
@@ -839,6 +843,7 @@ class IoT_sink: public node {
         // unsigned int get_one_hop_neighbor_num () { return one_hop_neighbors.size(); }
         void get_children(unsigned int parent);
         GET(get_parent, unsigned int, parent);
+        SET(set_info_size, int, info_size, size);
         class IoT_sink_generator;
         friend class IoT_sink_generator;
         // IoT_sink is derived from node_generator to generate a node
@@ -2274,11 +2279,24 @@ void IoT_sink::recv_handler(packet *p){
     // note that packet p will be discarded (deleted) after recv_handler(); you don't need to manually delete it
 }
 
+void input_info_size(int Nodes){
+    int id, size;
+    cin>>id>>size;
+    IoT_sink *root;
+    root = dynamic_cast<IoT_sink*>(node::id_to_node(id));
+    root->set_info_size(size);
+    for(int i=1 ;i<Nodes; i++){
+        cin>>id>>size;
+        IoT_device *output;
+        output = dynamic_cast<IoT_device*>(node::id_to_node(id));
+        output->set_info_size(size);
+    }
+}
 
 
 int main()
 {
-    int Nodes, Links, simTime, BFS_Start_Time, Data_Trans_Time;
+    int Nodes, Links, Packet_size, simTime, BFS_Start_Time, AGG_Start_Time, DIS_Start_Time, Data_Trans_Time;
     // header::header_generator::print(); // print all registered headers
     // payload::payload_generator::print(); // print all registered payloads
     // packet::packet_generator::print(); // print all registered packets
@@ -2287,18 +2305,19 @@ int main()
     // link::link_generator::print(); // print all registered links 
 
     //Linyexion:cin #Nodes #Links #simulator time #BFS start time #Data Translation time
-    cin>>Nodes>>Links>>simTime>>BFS_Start_Time>>Data_Trans_Time;
+    cin>>Nodes>>Links>>Packet_size>>simTime>>BFS_Start_Time>>AGG_Start_Time>>DIS_Start_Time>>Data_Trans_Time;
 
     node::node_generator::generate("IoT_sink", 0);
 
 
     // read the input and generate devices
-    for(int id = 1; id <= Nodes; id++){
+    for(int id = 1; id < Nodes; id++){
         node::node_generator::generate("IoT_device", id);
     }
     
     // please generate the sink by yourself
-    
+
+    input_info_size(Nodes);
     
     // set devices' neighbors--------------------------------------
     // example:
@@ -2330,15 +2349,15 @@ int main()
     // 3rd parameter: time (optional)
     // 4th parameter: msg for debug (optional)
     
-    
-    
-    //AGG_ctrl_packet_event(4, 0, 250);
+    for(int id=0; id<Nodes; id++){
+        AGG_ctrl_packet_event(id, 0, AGG_Start_Time);
+    }
     // 1st parameter: the source node
     // 2nd parameter: the destination node (sink)
     // 3rd parameter: time (optional)
     // 4th parameter: msg (for storing nb list)
     
-    //DIS_ctrl_packet_event(0, 260);
+    DIS_ctrl_packet_event(0, DIS_Start_Time);
     // 1st parameter: the source node (sink)
     // 2nd parameter: the destination node
     // 3rd parameter: parent 

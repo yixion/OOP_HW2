@@ -2293,7 +2293,7 @@ int main()
 
 
     // read the input and generate devices
-    for(int id = 1; id <= Nodes; id++){
+    for(int id = 1; id < Nodes; id++){
         node::node_generator::generate("IoT_device", id);
     }
     
