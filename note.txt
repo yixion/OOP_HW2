@@ -30,4 +30,12 @@ condition:
     2.用getPhyNeighbors().find(n_id)可以拿到neighbor
     3.用iterator 掃過所有節點neighbor
     4.getNodeID()可以拿到現在node的Id
+
+
+在IoT_device 存一個routing table
+
+routing table 需要
+
+preID 這個 Packet 來自誰
+message 
     
