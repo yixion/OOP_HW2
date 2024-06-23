@@ -1,0 +1,28 @@
+time          50                                         srcID          6   dstID          0                                         AGG_ctrl_packet generating
+time          50                                         srcID          3   dstID          0                                         AGG_ctrl_packet generating
+time          50                                         srcID          2   dstID          0                                         AGG_ctrl_packet generating
+time          50   recID          3   pktID          2   srcID          3   dstID          0   preID          3   nexID          3   AGG_ctrl_packet
+time          50   senID          3   pktID          2   srcID          3   dstID          0   preID          3   nexID          1   AGG_ctrl_packet
+time          50                                         srcID          5   dstID          0                                         AGG_ctrl_packet generating
+time          50   recID          6   pktID          1   srcID          6   dstID          0   preID          6   nexID          6   AGG_ctrl_packet
+time          50   recID          5   pktID          4   srcID          5   dstID          0   preID          5   nexID          5   AGG_ctrl_packet
+time          50   senID          5   pktID          4   srcID          5   dstID          0   preID          5   nexID          2   AGG_ctrl_packet
+time          50   recID          2   pktID          3   srcID          2   dstID          0   preID          2   nexID          2   AGG_ctrl_packet
+time          50                                         srcID          7   dstID          0                                         AGG_ctrl_packet generating
+time          50   recID          7   pktID          5   srcID          7   dstID          0   preID          7   nexID          7   AGG_ctrl_packet
+time          50   senID          7   pktID          5   srcID          7   dstID          0   preID          7   nexID          3   AGG_ctrl_packet
+time          50                                         srcID          1   dstID          0                                         AGG_ctrl_packet generating
+time          50   recID          1   pktID          6   srcID          1   dstID          0   preID          1   nexID          1   AGG_ctrl_packet
+time          50   senID          1   pktID          6   srcID          1   dstID          0   preID          1   nexID          0   AGG_ctrl_packet
+time          50   senID          2   pktID          3   srcID          2   dstID          0   preID          2   nexID          0   AGG_ctrl_packet
+time          50   senID          6   pktID          1   srcID          6   dstID          0   preID          6   nexID          2   AGG_ctrl_packet
+time          50                                         srcID          4   dstID          0                                         AGG_ctrl_packet generating
+time          50   recID          4   pktID          7   srcID          4   dstID          0   preID          4   nexID          4   AGG_ctrl_packet
+time          50   senID          4   pktID          7   srcID          4   dstID          0   preID          4   nexID          1   AGG_ctrl_packet
+time          60   recID          2   pktID          4   srcID          5   dstID          0   preID          5   nexID          2   AGG_ctrl_packet
+time          60   recID          0   pktID          3   srcID          2   dstID          0   preID          2   nexID          0   AGG_ctrl_packet
+time          60   recID          0   pktID          6   srcID          1   dstID          0   preID          1   nexID          0   AGG_ctrl_packet
+time          60   recID          1   pktID          7   srcID          4   dstID          0   preID          4   nexID          1   AGG_ctrl_packet
+time          60   recID          2   pktID          1   srcID          6   dstID          0   preID          6   nexID          2   AGG_ctrl_packet
+time          60   recID          1   pktID          2   srcID          3   dstID          0   preID          3   nexID          1   AGG_ctrl_packet
+time          60   recID          3   pktID          5   srcID          7   dstID          0   preID          7   nexID          3   AGG_ctrl_packet

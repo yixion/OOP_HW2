@@ -776,7 +776,8 @@ class IoT_device: public node {
         vector<int> children;
         map<unsigned int, bool> own_receive_table;
         stack<pair<unsigned, string>> async_register;
-        map<unsigned int, unsigned int> reverse_path;
+        //HW3 record the reverse path
+        map<unsigned int, unsigned int> reverse_path;// Linyexion_HW3_reverse_path
         bool waiting;
         int info_size;
         //----------------------------
@@ -793,6 +794,7 @@ class IoT_device: public node {
         virtual void recv_handler (packet *p);
         GET(get_parent, unsigned int, parent);
         SET(set_info_size, int, info_size, size);
+        GET(get_size_info, int, info_size);
         void get_children(unsigned int parent);
         bool child_is_empty(){return children.empty();}
         // void add_one_hop_neighbor (unsigned int n_id) { one_hop_neighbors[n_id] = true; }
@@ -827,6 +829,7 @@ class IoT_sink: public node {
         unsigned int parent;
         vector<unsigned int> children; 
         int info_size;
+        map<unsigned int, unsigned int> reverse_path; // Linyexion_HW3:reverse path
     protected:
         IoT_sink() {} // it should not be used
         IoT_sink(IoT_sink&) {} // it should not be used
@@ -844,6 +847,9 @@ class IoT_sink: public node {
         void get_children(unsigned int parent);
         GET(get_parent, unsigned int, parent);
         SET(set_info_size, int, info_size, size);
+        //  const map<unsigned int,bool> & getPhyNeighbors () { 
+        //     return phy_neighbors;
+        // }
         class IoT_sink_generator;
         friend class IoT_sink_generator;
         // IoT_sink is derived from node_generator to generate a node
@@ -866,6 +872,7 @@ void IoT_sink::get_children(unsigned int parent){
     }
     cout<<endl;
 }
+
 
 // -------------------------------------------------------------------------------------------------------------------
 
@@ -2107,20 +2114,53 @@ void IoT_device::recv_handler (packet *p){
             waiting = true;
         }
     }
-    else if (p->type() == "AGG_ctrl_packet") {
+    else if (p->type() == "AGG_ctrl_packet")//Linyexion_HW3_AGG_recv_handler
+    {
         AGG_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<AGG_ctrl_packet*> (p);
         AGG_ctrl_payload *l3 = nullptr;
         l3 = dynamic_cast<AGG_ctrl_payload*> (p3->getPayload());
-        
+        const map<unsigned int, bool> &nblist = getPhyNeighbors();
+        AGG_ctrl_header *h3 = nullptr;
+        h3 = dynamic_cast<AGG_ctrl_header*> (p3->getHeader());
+        if(l3->getMsg() == "default")//source node
+        {
+            string message = "";
+            for (map<unsigned int,bool>::const_iterator it = nblist.begin(); it != nblist.end();) {
+                message = message + to_string(it->first);
+                // if(it == nblist.begin()) it++;
+                // string nei = ", " + to_string(it->first);
+                // message = message + nei ;
+                if(++it != nblist.end()){
+                    message = message + ", ";
+                }
+            }
+            h3->setPreID(getNodeID());
+            h3->setNexID(get_parent());
+            l3->setMsg(message);
+            send_handler(p3);
+            // cout<<message<<endl;
+        }else{
+            reverse_path[h3->getSrcID()] = h3->getPreID();
+            h3->setPreID(getNodeID());
+            h3->setNexID(get_parent());
+            send_handler(p3);
+        }
+
+        //if(nblist.find(h3->getPreID()) == nblist.end()) return;
+        //send the neighborlist to the sink
         // cout << "node id = " << getNodeID() << ", msg = "  << l3->getMsg() << endl;
+        
     }
     else if (p->type() == "DIS_ctrl_packet") {
         DIS_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<DIS_ctrl_packet*> (p);
         DIS_ctrl_payload *l3 = nullptr;
         l3 = dynamic_cast<DIS_ctrl_payload*> (p3->getPayload());
-        
+        DIS_ctrl_header *h3 = nullptr;
+        h3 = dynamic_cast<DIS_ctrl_header*> (p3->getHeader());
+        h3->setPreID(getNodeID());
+        h3->setNexID(reverse_path[h3->getSrcID()]);
         // cout << "node id = " << getNodeID() << ", parent = "  << l3->getParent() << endl;
     }
 
@@ -2218,12 +2258,15 @@ void IoT_sink::recv_handler(packet *p){
     else if (p->type() == "IoT_data_packet" ) { // the device receives a packet
         // cout << "node " << getNodeID() << " send the packet" << endl;
     }
-    else if (p->type() == "AGG_ctrl_packet") {
+    else if (p->type() == "AGG_ctrl_packet") // Linyeion_HW3_AGG_sink
+    {
         AGG_ctrl_packet *p3 = nullptr;
         p3 = dynamic_cast<AGG_ctrl_packet*> (p);
         AGG_ctrl_payload *l3 = nullptr;
         l3 = dynamic_cast<AGG_ctrl_payload*> (p3->getPayload());
-        
+        AGG_ctrl_header *h3 = nullptr;
+        h3 = dynamic_cast<AGG_ctrl_header*> (p3->getHeader());
+        reverse_path[h3->getSrcID()] = h3->getPreID();
         // cout << "node id = " << getNodeID() << ", msg = "  << l3->getMsg() << endl;
     }
     else if (p->type() == "DIS_ctrl_packet") {
@@ -2231,7 +2274,15 @@ void IoT_sink::recv_handler(packet *p){
         p3 = dynamic_cast<DIS_ctrl_packet*> (p);
         DIS_ctrl_payload *l3 = nullptr;
         l3 = dynamic_cast<DIS_ctrl_payload*> (p3->getPayload());
-        
+        DIS_ctrl_header *h3 = nullptr;
+        h3 = dynamic_cast<DIS_ctrl_header*> (p3->getHeader());
+        for(map<unsigned int, unsigned int>::const_iterator it = reverse_path.begin(); it != reverse_path.end(); it++ )
+        {
+            h3->setPreID(getNodeID());
+            h3->setDstID(it->first);
+            h3->setNexID(it->second);
+            send_handler(p3);
+        }
         // cout << "node id = " << getNodeID() << ", parent = "  << l3->getParent() << endl;
     }
 
@@ -2349,7 +2400,7 @@ int main()
     // 3rd parameter: time (optional)
     // 4th parameter: msg for debug (optional)
     
-    for(int id=0; id<Nodes; id++){
+    for(int id=1; id<Nodes; id++){
         AGG_ctrl_packet_event(id, 0, AGG_Start_Time);
     }
     // 1st parameter: the source node
